@@ -12,6 +12,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class SoundsParser {
     private File rootDirectory = new File("./AmericanSounds");
@@ -175,10 +176,12 @@ public class SoundsParser {
         }
     }
 
-    private final long debounce = 2000;
+    private final long debounceAfterError = TimeUnit.SECONDS.toMillis(5);
+    private final long debounce = TimeUnit.SECONDS.toMillis(0);
 
     private void loadAudio(String audioUrl, File parentDirectory, String name) {
         try {
+            Thread.sleep(debounce);
             ReadableByteChannel readableByteChannel = Channels.newChannel(new URL(audioUrl).openStream());
             String format = getFileFormat(audioUrl);
             name = name
@@ -186,10 +189,18 @@ public class SoundsParser {
                     .replaceAll("\\\\", "%5c");
             FileOutputStream fileOutputStream = new FileOutputStream(new File(parentDirectory, name + "." + format));
             fileOutputStream.getChannel().transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
-            Thread.sleep(debounce);
         } catch (IOException e) {
             out.println(String.format("photoId = %s Ошибка скачивания Ошибка: %s\n", name, e.getMessage()));
-            e.printStackTrace();
+            log(String.format("Error download %s %s", e.getMessage(), audioUrl));
+            if (e.getMessage().contains("429")) {
+                try {
+                    Thread.sleep(debounceAfterError);
+                    log(String.format("Try download again %s", audioUrl));
+                    loadAudio(audioUrl, parentDirectory, name);
+                } catch (InterruptedException interruptedException) {
+                    interruptedException.printStackTrace();
+                }
+            } else e.printStackTrace();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -197,16 +208,25 @@ public class SoundsParser {
 
     private void loadPhoto(String imageUrl, File parentDirectory, String name) {
         try {
+            Thread.sleep(debounce);
             BufferedImage bufferedImage = ImageIO.read(new URL(imageUrl));
             String format = getFileFormat(imageUrl);
             name = name
                     .replaceAll("/", "%2f")
                     .replaceAll("\\\\", "%5c");
             ImageIO.write(bufferedImage, format, new File(parentDirectory, name + "." + format));
-            Thread.sleep(debounce);
         } catch (IOException e) {
             out.println(String.format("photoId = %s Ошибка скачивания Ошибка: %s\n", name, e.getMessage()));
-            e.printStackTrace();
+            log(String.format("Error download %s %s", e.getMessage(), imageUrl));
+            if (e.getMessage().contains("429")) {
+                try {
+                    Thread.sleep(debounceAfterError);
+                    loadPhoto(imageUrl, parentDirectory, name);
+                    log(String.format("Try download again %s", imageUrl));
+                } catch (InterruptedException interruptedException) {
+                    interruptedException.printStackTrace();
+                }
+            } else e.printStackTrace();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
