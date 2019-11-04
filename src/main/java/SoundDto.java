@@ -8,7 +8,7 @@ public class SoundDto {
     public String audioPath = "";
     public String photoPath = "";
     public List<SpellingWordDto> spellingWordList = new ArrayList<>();
-    public SoundPracticeWords SoundPracticeWords = new SoundPracticeWords();
+    public SoundPracticeWords soundPracticeWords = new SoundPracticeWords();
     public SoundType soundType;
 
     public static class SoundPracticeWords {
