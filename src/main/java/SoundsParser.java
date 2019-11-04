@@ -107,13 +107,27 @@ public class SoundsParser {
         });
     }
 
-    private List<SoundDto> forEachElement(Element element, File parentDirectory, SoundDto.SoundType soundType) throws IOException {
+    private List<SoundDto> forEachElement(Element element, File parentDirectory, SoundDto.SoundType soundType) {
         List<SoundDto> soundDtoList = new ArrayList<>();
+        ExecutorService service = Executors.newCachedThreadPool();
         for (int i = 0; i < element.childNodeSize(); i++) {
-            SoundDto soundDto = new SoundDto();
-            soundDto.soundType = soundType;
-            parseSoundRow(element.child(i), parentDirectory, soundDto);
-            soundDtoList.add(soundDto);
+            Element child = element.child(i);
+            service.submit(() -> {
+                try {
+                    SoundDto soundDto = new SoundDto();
+                    soundDto.soundType = soundType;
+                    parseSoundRow(child, parentDirectory, soundDto);
+                    soundDtoList.add(soundDto);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+        try {
+            service.shutdown();
+            service.awaitTermination(60, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
         return soundDtoList;
     }
@@ -129,21 +143,21 @@ public class SoundsParser {
     }
 
     private void parsePronunciationPage(Element element, File soundDirectory, String soundName, SoundDto soundDto) throws IOException {
-        String pronunciation = element.child(1).childNodes().get(0).toString();
+        String pronunciation = "pronunciation";
         File pronunciationDirectory = createDir(soundDirectory, pronunciation);
         String pronunciationUrl = element.child(1).attr("href");
         Document doc = Jsoup.connect(baseUrl + pronunciationUrl).get();
         Elements allPage = doc.body().select("*");
         String imageUrl = allPage.select("img[src$=.gif]").attr("src");
         soundDto.photoPath =
-                loadAudio(imageUrl, pronunciationDirectory, soundName).getPath();
+                trimPathForAndroidAssets(loadAudio(imageUrl, pronunciationDirectory, soundName).getPath());
         String soundAudioUrl = allPage.select("div.sqs-audio-embed").attr("data-url");
         soundDto.audioPath =
-                loadAudio(soundAudioUrl, pronunciationDirectory, soundName).getPath();
+                trimPathForAndroidAssets(loadAudio(soundAudioUrl, pronunciationDirectory, soundName).getPath());
     }
 
     private void parseSpellingPage(Element element, File soundDirectory, SoundDto soundDto) throws IOException {
-        String spelling = element.child(2).childNodes().get(0).toString();
+        String spelling = "spelling";
         File spellingDirectory = createDir(soundDirectory, spelling);
         String spellingUrl = element.child(2).attr("href");
         Document doc = Jsoup.connect(baseUrl + spellingUrl).get();
@@ -182,7 +196,7 @@ public class SoundsParser {
                 File newAudio = loadAudio(audioUrl, spellingDirectory, word);
                 if (newAudio != null) {
                     SpellingWordDto newWord = new SpellingWordDto();
-                    newWord.audioPath = newAudio.getPath();
+                    newWord.audioPath = trimPathForAndroidAssets(newAudio.getPath());
                     newWord.name = word;
                     newWord.transcription = transcriptionHtml;
                     soundDto.spellingWordList.add(newWord);
@@ -199,7 +213,7 @@ public class SoundsParser {
     }
 
     private void parsePracticePage(Element element, File soundDirectory, SoundDto soundDto) throws IOException {
-        String practice = element.child(3).childNodes().get(0).toString();
+        String practice = "practice";
         File practiceDirectory = createDir(soundDirectory, practice);
         String practiceUrl = element.child(3).attr("href");
         Document doc = Jsoup.connect(baseUrl + practiceUrl).get();
@@ -233,7 +247,7 @@ public class SoundsParser {
                         if (newAudio != null) {
                             PracticeWordDto newWord = new PracticeWordDto();
                             newWord.name = word;
-                            newWord.audioPath = newAudio.getPath();
+                            newWord.audioPath = trimPathForAndroidAssets(newAudio.getPath());
                             switch (finalSoundPositionDirectory.getName()) {
                                 case "Beginning sound":
                                     soundDto.soundPracticeWords.beginningSound.add(newWord);
@@ -325,5 +339,9 @@ public class SoundsParser {
 
     private void log(String msg) {
         System.out.println("SoundsParser: " + msg);
+    }
+
+    private String trimPathForAndroidAssets(String path) {
+        return path.substring(2);
     }
 }
