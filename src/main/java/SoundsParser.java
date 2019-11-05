@@ -138,8 +138,8 @@ public class SoundsParser {
         soundDto.transcription = soundTranscription;
         File soundDirectory = createDir(parentDirectory, soundTranscription);
         parsePronunciationPage(element, soundDirectory, soundTranscription, soundDto);
-        parseSpellingPage(element, soundDirectory, soundDto);
-        parsePracticePage(element, soundDirectory, soundDto);
+        parseSpellingPage(element, soundDirectory, soundDto, soundTranscription);
+        parsePracticePage(element, soundDirectory, soundDto, soundTranscription);
     }
 
     private void parsePronunciationPage(Element element, File soundDirectory, String soundName, SoundDto soundDto) throws IOException {
@@ -156,7 +156,7 @@ public class SoundsParser {
                 trimPathForAndroidAssets(loadAudio(soundAudioUrl, pronunciationDirectory, soundName).getPath());
     }
 
-    private void parseSpellingPage(Element element, File soundDirectory, SoundDto soundDto) throws IOException {
+    private void parseSpellingPage(Element element, File soundDirectory, SoundDto soundDto, String soundTranscription) throws IOException {
         String spelling = "spelling";
         File spellingDirectory = createDir(soundDirectory, spelling);
         String spellingUrl = element.child(2).attr("href");
@@ -199,6 +199,7 @@ public class SoundsParser {
                     newWord.audioPath = trimPathForAndroidAssets(newAudio.getPath());
                     newWord.name = word;
                     newWord.transcription = transcriptionHtml;
+                    newWord.sound = soundTranscription;
                     soundDto.spellingWordList.add(newWord);
                 }
                 log(String.format("Download %s %s %s %s from %s", spelling, word, transcriptionText, transcriptionHtml, audioItem.baseUri()));
@@ -212,7 +213,7 @@ public class SoundsParser {
         }
     }
 
-    private void parsePracticePage(Element element, File soundDirectory, SoundDto soundDto) throws IOException {
+    private void parsePracticePage(Element element, File soundDirectory, SoundDto soundDto, String soundTranscription) throws IOException {
         String practice = "practice";
         File practiceDirectory = createDir(soundDirectory, practice);
         String practiceUrl = element.child(3).attr("href");
@@ -247,15 +248,19 @@ public class SoundsParser {
                         if (newAudio != null) {
                             PracticeWordDto newWord = new PracticeWordDto();
                             newWord.name = word;
+                            newWord.sound = soundTranscription;
                             newWord.audioPath = trimPathForAndroidAssets(newAudio.getPath());
                             switch (finalSoundPositionDirectory.getName()) {
                                 case "Beginning sound":
+                                    newWord.soundPositionType = PracticeWordDto.SoundPositionType.beginningSound;
                                     soundDto.soundPracticeWords.beginningSound.add(newWord);
                                     break;
                                 case "End Sound":
+                                    newWord.soundPositionType = PracticeWordDto.SoundPositionType.endSound;
                                     soundDto.soundPracticeWords.endSound.add(newWord);
                                     break;
                                 case "Middle Sound":
+                                    newWord.soundPositionType = PracticeWordDto.SoundPositionType.middleSound;
                                     soundDto.soundPracticeWords.middleSound.add(newWord);
                                     break;
                             }
