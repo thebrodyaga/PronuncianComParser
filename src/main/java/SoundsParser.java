@@ -41,12 +41,15 @@ public class SoundsParser {
         file.delete();
     }
 
+    File audioDirectory = null;
+
     public void startParse() throws FileNotFoundException {
         /*File file = new File(new File(rootDirectory, "json"), "vowelSoundsJson");
         List<SoundDto> yourClassList = new Gson().fromJson(new FileReader(file), listType);*/
         deleteDir(rootDirectory);
         boolean newRootDir = rootDirectory.mkdir();
         File resultDirectory = createDir(rootDirectory, "result");
+        audioDirectory = createDir(rootDirectory, "audio");
         try {
             boolean newErrorFile = errorFile.createNewFile();
             FileWriter fw = new FileWriter(errorFile, true);
@@ -68,7 +71,8 @@ public class SoundsParser {
                     .select(".col.sqs-col-12.span-12")
                     .select(".sqs-block.html-block.sqs-block-html")
                     .select(".sqs-block-content")
-                    .first();
+                    .first()
+                    .child(0);
             Element vowelSounds = allSounds.child(3);
             Element rControlledVowels = allSounds.child(5);
             Element consonantSounds = allSounds.child(7);
@@ -143,8 +147,7 @@ public class SoundsParser {
     }
 
     private void parsePronunciationPage(Element element, File soundDirectory, String soundName, SoundDto soundDto) throws IOException {
-        String pronunciation = "pronunciation";
-        File pronunciationDirectory = createDir(soundDirectory, pronunciation);
+        File pronunciationDirectory = soundDirectory;
         String pronunciationUrl = element.child(1).attr("href");
         Document doc = Jsoup.connect(baseUrl + pronunciationUrl).get();
         Elements allPage = doc.body().select("*");
@@ -158,7 +161,6 @@ public class SoundsParser {
 
     private void parseSpellingPage(Element element, File soundDirectory, SoundDto soundDto, String soundTranscription) throws IOException {
         String spelling = "spelling";
-        File spellingDirectory = createDir(soundDirectory, spelling);
         String spellingUrl = element.child(2).attr("href");
         Document doc = Jsoup.connect(baseUrl + spellingUrl).get();
         Elements allMainContent = doc.body().select("*").select("div.main-content").select("*");
@@ -193,7 +195,7 @@ public class SoundsParser {
                         break;
                     }
                 }
-                File newAudio = loadAudio(audioUrl, spellingDirectory, word);
+                File newAudio = loadAudio(audioUrl, null, word);
                 if (newAudio != null) {
                     SpellingWordDto newWord = new SpellingWordDto();
                     newWord.audioPath = trimPathForAndroidAssets(newAudio.getPath());
@@ -214,8 +216,6 @@ public class SoundsParser {
     }
 
     private void parsePracticePage(Element element, File soundDirectory, SoundDto soundDto, String soundTranscription) throws IOException {
-        String practice = "practice";
-        File practiceDirectory = createDir(soundDirectory, practice);
         String practiceUrl = element.child(3).attr("href");
         Document doc = Jsoup.connect(baseUrl + practiceUrl).get();
         List<Node> allMainContent = doc.select("*")
@@ -225,7 +225,7 @@ public class SoundsParser {
                 .child(0)
                 .child(0)
                 .childNodes();
-        File soundPositionDirectory = null;
+        String soundPositionDirectory = null;
         for (int i = 0; i < allMainContent.size(); i++) {
             Node node = allMainContent.get(i);
             if (!(node instanceof Element))
@@ -234,23 +234,23 @@ public class SoundsParser {
             elementItem.select("*").select("div.sqs-block-content");
             Element soundPositionTitle = elementItem.select("*").select("h2").last();
             if (soundPositionTitle != null) {
-                soundPositionDirectory = createDir(practiceDirectory, Jsoup.parse(soundPositionTitle.html()).text());
+                soundPositionDirectory = Jsoup.parse(soundPositionTitle.html()).text();
             }
             Elements audioElements = elementItem.select("*").select("div.sqs-audio-embed");
             ExecutorService service = Executors.newCachedThreadPool();
             for (Element audio : audioElements) {
-                File finalSoundPositionDirectory = soundPositionDirectory;
+                String finalSoundPositionDirectory = soundPositionDirectory;
                 service.submit(() -> {
                     String word = audio.attr("data-title");
                     String audioUrl = audio.attr("data-url");
                     if (finalSoundPositionDirectory != null) {
-                        File newAudio = loadAudio(audioUrl, finalSoundPositionDirectory, word);
+                        File newAudio = loadAudio(audioUrl, null, word);
                         if (newAudio != null) {
                             PracticeWordDto newWord = new PracticeWordDto();
                             newWord.name = word;
                             newWord.sound = soundTranscription;
                             newWord.audioPath = trimPathForAndroidAssets(newAudio.getPath());
-                            switch (finalSoundPositionDirectory.getName()) {
+                            switch (finalSoundPositionDirectory) {
                                 case "Beginning sound":
                                     newWord.soundPositionType = PracticeWordDto.SoundPositionType.beginningSound;
                                     soundDto.soundPracticeWords.beginningSound.add(newWord);
@@ -265,7 +265,7 @@ public class SoundsParser {
                                     break;
                             }
                         }
-                        log(String.format("Download %s for %s in %s from %s", word, soundDirectory.getName(), finalSoundPositionDirectory.getName(), audio.baseUri()));
+                        log(String.format("Download %s for %s in %s from %s", word, soundDirectory.getName(), finalSoundPositionDirectory, audio.baseUri()));
                     }
                 });
             }
@@ -278,7 +278,7 @@ public class SoundsParser {
         }
     }
 
-    private final long debounceAfterError = TimeUnit.SECONDS.toMillis(5);
+    private final long debounceAfterError = TimeUnit.SECONDS.toMillis(10);
     private final long debounce = TimeUnit.SECONDS.toMillis(0);
 
     private File loadAudio(String audioUrl, File parentDirectory, String name) {
@@ -287,9 +287,19 @@ public class SoundsParser {
         name = name
                 .replaceAll("/", "%2f")
                 .replaceAll("\\\\", "%5c");
+        File targetDirectory;
+        if (parentDirectory != null) {
+            targetDirectory = parentDirectory;
+        } else {
+            targetDirectory = audioDirectory;
+        }
         try {
             Thread.sleep(debounce);
-            File newFile = new File(parentDirectory, name + "." + format);
+            File newFile = new File(targetDirectory, name + "." + format);
+            if (newFile.exists()) {
+                result = newFile;
+                return result;
+            }
             ReadableByteChannel readableByteChannel = Channels.newChannel(new URL(audioUrl).openStream());
             FileOutputStream fileOutputStream = new FileOutputStream(newFile);
             fileOutputStream.getChannel().transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
@@ -301,7 +311,7 @@ public class SoundsParser {
                 try {
                     Thread.sleep(debounceAfterError);
                     log(String.format("Try download again %s", audioUrl));
-                    result = loadAudio(audioUrl, parentDirectory, name);
+                    result = loadAudio(audioUrl, targetDirectory, name);
                 } catch (InterruptedException interruptedException) {
                     interruptedException.printStackTrace();
                     result = null;
