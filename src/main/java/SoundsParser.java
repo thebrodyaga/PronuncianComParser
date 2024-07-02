@@ -84,10 +84,14 @@ public class SoundsParser {
             List<SoundDto> consonantSoundsList =
                     forEachElement(consonantSounds, createDir(resultDirectory, "consonantSounds"), SoundDto.SoundType.consonantSounds);
 
-            File jsonDirectory = createDir(rootDirectory, "json");
-            soundListToJson(jsonDirectory, vowelSoundsList, "vowelSoundsJson");
-            soundListToJson(jsonDirectory, rControlledVowelsList, "rControlledVowels");
-            soundListToJson(jsonDirectory, consonantSoundsList, "consonantSounds");
+//            File jsonDirectory = createDir(rootDirectory, "json");
+            List<SoundDto> allSoundsJson = new ArrayList<SoundDto>();
+            allSoundsJson.addAll(vowelSoundsList);
+            allSoundsJson.addAll(rControlledVowelsList);
+            allSoundsJson.addAll(consonantSoundsList);
+            soundListToJson(rootDirectory, allSoundsJson, "vowelSoundsJson");
+//            soundListToJson(jsonDirectory, rControlledVowelsList, "rControlledVowels");
+//            soundListToJson(jsonDirectory, consonantSoundsList, "consonantSounds");
 
             log("FINISH");
 
@@ -100,15 +104,15 @@ public class SoundsParser {
 
     private void soundListToJson(File parentDirectory, List<SoundDto> list, String type) {
 //        File soundsJsonDir = createDir(parentDirectory, type);
-        list.forEach(soundDto -> {
+//        list.forEach(soundDto -> {
             try {
-                BufferedWriter writer = new BufferedWriter(new FileWriter(new File(parentDirectory, soundDto.transcription)));
-                writer.write(gson.toJson(soundDto));
+                BufferedWriter writer = new BufferedWriter(new FileWriter(new File(parentDirectory, "json")));
+                writer.write(gson.toJson(list));
                 writer.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        });
+//        });
     }
 
     private List<SoundDto> forEachElement(Element element, File parentDirectory, SoundDto.SoundType soundType) {
